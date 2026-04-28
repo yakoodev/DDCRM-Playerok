@@ -1,0 +1,3 @@
+[submodule "vendor/playerok-universal"]
+	path = vendor/playerok-universal
+	url = https://github.com/alleexxeeyy/playerok-universal.git
