@@ -42,3 +42,9 @@
    - Адаптер работает в single-tenant модели (один контейнер на один DDCRM account) и читает auth/прокси по bound account scope.
    - Binding фиксируется через env (`PLAYEROK_WORKER_ACCOUNT_ID`/`DDCRM_WORKER_ACCOUNT_ID`) или на первом `ext.account.*.apply`.
    - Статус: `partial` (single-tenant закрыт в v1, multi-tenant read-scope остаётся deferred).
+
+7. Product metadata helper (`ext.playerok.products.metadata`):
+   - Для улучшения UX формы товара worker предоставляет extension-action с метаданными:
+     - `games`, `categories`, `options`, `obtainingTypes`, `dataFields`.
+   - API `playerok-universal` не гарантирует консистентность/доступность metadata в каждый момент (network/rate-limit), поэтому UI обязан иметь graceful fallback на ручной ввод provider-полей.
+   - Статус: `implemented-with-fallback` (action реализован, но metadata не является hard dependency для `products.create/update`).

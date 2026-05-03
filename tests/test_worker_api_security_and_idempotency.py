@@ -190,3 +190,91 @@ def test_env_bound_account_rejects_other_account_payload(tmp_path: Path) -> None
         )
         assert response.status_code == 409
         assert response.json()["errorCode"] == "WORKER_RUNTIME_CONFLICT"
+
+
+def test_worker_capabilities_include_playerok_metadata_action(tmp_path: Path) -> None:
+    module = _load_worker_module(tmp_path)
+    with TestClient(module.app) as client:
+        response = client.get(
+            "/internal/v2/worker/capabilities",
+            headers={"X-Service-Token": "worker-token-a"},
+        )
+        assert response.status_code == 200
+        capability_keys = {
+            item.get("key")
+            for item in response.json().get("capabilities", [])
+            if isinstance(item, dict)
+        }
+        assert "ext.playerok.products.metadata" in capability_keys
+
+
+def test_playerok_metadata_action_uses_bound_account_scope(tmp_path: Path) -> None:
+    module = _load_worker_module(tmp_path)
+    captured: dict[str, str | None] = {}
+
+    def _fake_metadata(
+        account_id: str,
+        game_category_id: str | None = None,
+        obtaining_type_id: str | None = None,
+    ) -> dict[str, object]:
+        captured["accountId"] = account_id
+        captured["gameCategoryId"] = game_category_id
+        captured["obtainingTypeId"] = obtaining_type_id
+        return {
+            "provider": "playerok",
+            "games": [],
+            "categories": [],
+            "options": [],
+            "obtainingTypes": [],
+            "dataFields": [],
+            "query": {
+                "gameCategoryId": game_category_id,
+                "obtainingTypeId": obtaining_type_id,
+            },
+        }
+
+    module.adapter.get_product_metadata = _fake_metadata
+
+    with TestClient(module.app) as client:
+        bind_response = client.post(
+            "/internal/v2/worker/actions/ext.account.marketplace-auth.apply",
+            headers={
+                "X-Service-Token": "worker-token-a",
+                "Idempotency-Key": "idem-meta-bind-1",
+            },
+            json={
+                "payload": {
+                    "accountId": "acc-meta-1",
+                    "marketplaceAuth": {
+                        "scheme": "tokens",
+                        "credentials": {"token": "token-1", "ddg5": "ddg5-1"},
+                    },
+                }
+            },
+        )
+        assert bind_response.status_code == 200
+
+        metadata_response = client.post(
+            "/internal/v2/worker/actions/ext.playerok.products.metadata",
+            headers={
+                "X-Service-Token": "worker-token-a",
+                "Idempotency-Key": "idem-meta-call-1",
+            },
+            json={
+                "payload": {
+                    "gameCategoryId": "cat-101",
+                    "obtainingTypeId": "obt-201",
+                }
+            },
+        )
+        assert metadata_response.status_code == 200
+        body = metadata_response.json()
+        assert body["result"]["provider"] == "playerok"
+        assert body["result"]["query"]["gameCategoryId"] == "cat-101"
+        assert body["result"]["query"]["obtainingTypeId"] == "obt-201"
+
+    assert captured == {
+        "accountId": "acc-meta-1",
+        "gameCategoryId": "cat-101",
+        "obtainingTypeId": "obt-201",
+    }

@@ -57,6 +57,7 @@ class PlayerokAdapter:
             "ext.account.proxy-credentials.apply",
             "ext.account.proxy-credentials.reveal",
             "ext.account.marketplace-auth.apply",
+            "ext.playerok.products.metadata",
         ]
 
     def resolve_credentials(self, account_id: str) -> PlayerokCredentials:
@@ -249,6 +250,104 @@ class PlayerokAdapter:
 
         items.sort(key=lambda item: item.productId, reverse=True)
         return items
+
+    def get_product_metadata(
+        self,
+        account_id: str,
+        game_category_id: str | None = None,
+        obtaining_type_id: str | None = None,
+    ) -> dict[str, Any]:
+        client, _ = self._create_account_client(account_id)
+        try:
+            client.get()
+
+            games_page = client.get_games(count=24)
+            games_payload: list[dict[str, Any]] = []
+            categories_payload: list[dict[str, Any]] = []
+            for game in getattr(games_page, "games", []) or []:
+                game_id = str(getattr(game, "id", "") or "")
+                games_payload.append(
+                    {
+                        "id": game_id,
+                        "slug": str(getattr(game, "slug", "") or ""),
+                        "name": str(getattr(game, "name", "") or ""),
+                    }
+                )
+                for category in getattr(game, "categories", []) or []:
+                    categories_payload.append(
+                        {
+                            "id": str(getattr(category, "id", "") or ""),
+                            "gameId": game_id,
+                            "slug": str(getattr(category, "slug", "") or ""),
+                            "name": str(getattr(category, "name", "") or ""),
+                        }
+                    )
+
+            options_payload: list[dict[str, Any]] = []
+            obtaining_types_payload: list[dict[str, Any]] = []
+            data_fields_payload: list[dict[str, Any]] = []
+            resolved_category_id = (game_category_id or "").strip()
+            resolved_obtaining_type_id = (obtaining_type_id or "").strip()
+
+            if resolved_category_id:
+                category = client.get_game_category(id=resolved_category_id)
+                options_payload = [
+                    {
+                        "id": str(getattr(option, "id", "") or ""),
+                        "field": str(getattr(option, "field", "") or ""),
+                        "value": str(getattr(option, "value", "") or ""),
+                        "label": str(getattr(option, "label", "") or ""),
+                        "group": str(getattr(option, "group", "") or ""),
+                    }
+                    for option in getattr(category, "options", []) or []
+                ]
+
+                obtaining_page = client.get_game_category_obtaining_types(
+                    game_category_id=resolved_category_id,
+                    count=24,
+                )
+                obtaining_types_payload = [
+                    {
+                        "id": str(getattr(item, "id", "") or ""),
+                        "name": str(getattr(item, "name", "") or ""),
+                        "slug": str(getattr(item, "slug", "") or ""),
+                    }
+                    for item in getattr(obtaining_page, "obtaining_types", []) or []
+                ]
+
+                if not resolved_obtaining_type_id and obtaining_types_payload:
+                    resolved_obtaining_type_id = obtaining_types_payload[0]["id"]
+
+                if resolved_obtaining_type_id:
+                    data_fields_page = client.get_game_category_data_fields(
+                        game_category_id=resolved_category_id,
+                        obtaining_type_id=resolved_obtaining_type_id,
+                        count=24,
+                    )
+                    data_fields_payload = [
+                        {
+                            "id": str(getattr(field, "id", "") or ""),
+                            "name": str(getattr(field, "name", "") or ""),
+                            "required": bool(getattr(field, "required", False)),
+                            "type": str(getattr(getattr(field, "type", None), "name", "") or ""),
+                        }
+                        for field in getattr(data_fields_page, "data_fields", []) or []
+                    ]
+        except Exception as exc:  # pragma: no cover - network runtime
+            self._translate_exception(exc)
+
+        return {
+            "provider": self._config.provider,
+            "games": games_payload,
+            "categories": categories_payload,
+            "options": options_payload,
+            "obtainingTypes": obtaining_types_payload,
+            "dataFields": data_fields_payload,
+            "query": {
+                "gameCategoryId": resolved_category_id or None,
+                "obtainingTypeId": resolved_obtaining_type_id or None,
+            },
+        }
 
     def create_product(self, account_id: str, request: WorkerV2ProductCreateRequest) -> WorkerV2Product:
         if request.schemaId.strip().lower() != "playerok.item.v1":
