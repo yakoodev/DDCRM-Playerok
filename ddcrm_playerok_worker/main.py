@@ -507,6 +507,19 @@ def _build_action_response(request: Request, action: str, payload: dict[str, Any
         )
         return 200, response.model_dump(mode="json")
 
+    if action == "ext.playerok.products.metadata":
+        metadata = adapter.get_product_metadata(
+            _require_bound_account_id(),
+            game_category_id=str(payload.get("gameCategoryId", "")).strip() or None,
+            obtaining_type_id=str(payload.get("obtainingTypeId", "")).strip() or None,
+        )
+        response = ExtensionActionResponse(
+            requestId=_request_id(request),
+            result=metadata,
+            warnings=[],
+        )
+        return 200, response.model_dump(mode="json")
+
     raise ApiError(
         status_code=400,
         error_code=WorkerErrorCodes.INVALID_ACTION,

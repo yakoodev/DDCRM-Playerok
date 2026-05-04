@@ -28,6 +28,7 @@ Python/FastAPI реализация worker runtime для DDCRM (`/internal/v2/w
 - Secret storage:
   - `ext.account.proxy-credentials.apply/reveal`;
   - `ext.account.marketplace-auth.apply`;
+  - `ext.playerok.products.metadata` (подсказки для категорий/опций/data-fields формы товара);
   - шифрование в SQLite storage (`AES-GCM`).
 - Account scope:
   - worker работает в single-tenant режиме (один runtime account на контейнер);
